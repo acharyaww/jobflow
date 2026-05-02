@@ -1,0 +1,65 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #F7F4EE;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Remove default input/button appearance */
+input, textarea, button, select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #B0A898;
+}
+
+textarea {
+  field-sizing: content;
+}
+
+/* Print: only show the resume content, packed tight to fit on one page */
+@media print {
+  body * { visibility: hidden; }
+  #resume-printable, #resume-printable * { visibility: visible; }
+  #resume-printable {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    padding: 0.3in 0.3in !important;
+    margin: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    box-sizing: border-box !important;
+    line-height: 1.22 !important;
+    font-size: 9.5pt !important;
+  }
+  #resume-printable .resume-name { font-size: 16pt !important; margin-bottom: 2pt !important; text-align: center !important; line-height: 1.1 !important; }
+  #resume-printable .resume-contact { font-size: 8.5pt !important; margin-bottom: 4pt !important; text-align: center !important; line-height: 1.25 !important; }
+  #resume-printable .resume-langs { font-size: 8pt !important; margin-bottom: 2pt !important; text-align: center !important; }
+  #resume-printable .resume-section { margin-top: 4pt !important; }
+  #resume-printable .resume-section-title { font-size: 8.5pt !important; padding-bottom: 0.5pt !important; margin-bottom: 2pt !important; border-bottom-width: 0.5pt !important; letter-spacing: 0.04em !important; }
+  #resume-printable .resume-item-title { font-size: 9.5pt !important; }
+  #resume-printable .resume-summary { font-size: 9pt !important; line-height: 1.3 !important; margin-bottom: 2pt !important; }
+  #resume-printable .resume-coursework { font-size: 8.5pt !important; }
+  #resume-printable .resume-skill-row { font-size: 9pt !important; margin-bottom: 1pt !important; }
+  #resume-printable .resume-tech-stack { font-size: 8.5pt !important; }
+  #resume-printable .resume-bullet { font-size: 9pt !important; line-height: 1.28 !important; margin-bottom: 1pt !important; padding-left: 1em !important; text-indent: -1em !important; }
+  #resume-printable .resume-bullets { margin: 1pt 0 2pt 0 !important; padding: 0 !important; }
+  #resume-printable .resume-entry { margin-bottom: 3pt !important; page-break-inside: avoid; }
+  #resume-printable .resume-row-right { font-size: 8.5pt !important; }
+  @page { margin: 0; size: 8.5in 11in; }
+}
