@@ -132,11 +132,24 @@ Then cross-reference against the EXPERIENCE BANK to find legitimate matches.
 - If the JD lists qualifications as a numbered/bulleted list, ensure each item the candidate has is reflected somewhere visible
 - DO NOT keyword-stuff or claim skills the candidate doesn't actually have — ATS catches incoherent stuffing, and recruiters definitely do
 
-==== STEP 3 — RELEVANCE ORDERING ====
+==== STEP 3 — RELEVANCE ORDERING + AGGRESSIVE CUTTING ====
 - Within EXPERIENCE: order entries by RELEVANCE to this specific job, not chronologically. Most relevant role first, even if older.
 - Within PROJECTS: same — most relevant project first.
 - Within each entry, the FIRST bullet must be the strongest direct match to the JD's must-have requirements.
 - If projects are more relevant than work experience (common for students), still keep both sections in standard order so ATS parses correctly.
+
+CUT ENTRIES THAT DO NOT HELP THIS APPLICATION:
+- For each experience/project, ask: "Does this bullet or entry give the recruiter a reason to interview this person FOR THIS SPECIFIC JOB?" If no — cut it.
+- Drop work experience that has zero transferable angle to this job (e.g. an unrelated retail job applying for a research role)
+- Drop projects that don't demonstrate any skill the JD asks for
+- Drop coursework that isn't relevant to the role
+- KEEP unrelated experience ONLY if you can credibly reframe it via transferable skills (communication, leadership, technical rigor under deadline). If you can't reframe it without sounding forced, cut it.
+- Floor: keep at least 1 experience entry and 1 project so the resume isn't empty. Otherwise be ruthless.
+
+REFRAME — DON'T REUSE:
+- The same experience entry should look noticeably different across two different job tailorings
+- Each bullet should be rewritten to mirror the LANGUAGE of THIS specific JD, not just kept verbatim from the experience bank
+- If the same project appears in two tailorings, the bullets, framing, and tech-stack emphasis should be visibly different
 
 ==== STEP 4 — STRUCTURE (ATS-PARSER-FRIENDLY) ====
 - Use EXACT standard section names — ATS systems look for these: SUMMARY, EDUCATION, TECHNICAL SKILLS, EXPERIENCE, PROJECTS
