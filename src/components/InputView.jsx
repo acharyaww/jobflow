@@ -455,14 +455,14 @@ export default function InputView({ profile, onProfileChange, experience, onExpe
             )}
 
             <div style={{ backgroundColor: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <Field label="Full Name" placeholder="Manas Acharya" value={profile.name} onChange={p('name')} />
-              <Field label="Email" placeholder="manas@email.com" value={profile.email} onChange={p('email')} type="email" />
-              <Field label="Phone" placeholder="+1 (720) 555-0123" value={profile.phone} onChange={p('phone')} />
-              <Field label="Location" placeholder="Lafayette, CO" value={profile.address} onChange={p('address')} />
-              <Field label="LinkedIn" placeholder="linkedin.com/in/manas-acharya" value={profile.linkedin} onChange={p('linkedin')} />
-              <Field label="GitHub" placeholder="github.com/acharyaww" value={profile.github} onChange={p('github')} />
-              <Field label="Personal Website" placeholder="manasacharya.com" value={profile.website} onChange={p('website')} />
-              <Field label="Languages" placeholder="English, Hindi, Spanish" value={profile.languages} onChange={p('languages')} />
+              <Field label="Full Name" placeholder="John Doe" value={profile.name} onChange={p('name')} />
+              <Field label="Email" placeholder="john.doe@email.com" value={profile.email} onChange={p('email')} type="email" />
+              <Field label="Phone" placeholder="+1 (555) 555-0123" value={profile.phone} onChange={p('phone')} />
+              <Field label="Location" placeholder="City, State" value={profile.address} onChange={p('address')} />
+              <Field label="LinkedIn" placeholder="linkedin.com/in/johndoe" value={profile.linkedin} onChange={p('linkedin')} />
+              <Field label="GitHub" placeholder="github.com/johndoe" value={profile.github} onChange={p('github')} />
+              <Field label="Personal Website" placeholder="johndoe.com" value={profile.website} onChange={p('website')} />
+              <Field label="Languages" placeholder="English, Spanish" value={profile.languages} onChange={p('languages')} />
             </div>
 
             <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.75rem' }}>
@@ -536,21 +536,21 @@ export default function InputView({ profile, onProfileChange, experience, onExpe
               placeholder={`Examples — write however feels natural:
 
 JOBS
-I worked at Walmart from 2020 to now as a service writer / auto technician. I diagnose car problems, write up repair orders, and trained 3 new techs on diagnostics.
+I worked at Acme Corp from 2020 to now as an operations associate. I handle inventory, work with vendors, and trained 3 new hires on our internal tools.
 
-Last summer I interned at PCH Tech Solutions in Westminster, CO building a job-search web app with React and the Claude API.
+Last summer I interned at Sample Tech building a customer dashboard with React and a REST API.
 
 PROJECTS
-Built WhaleWatch — a Python + Flask app that pulls SEC 13F filings every quarter and detects when hedge funds make big moves. Sends alerts via Pushover.
+Built a stock-tracker — a Python app that pulls live market data and sends alerts when prices cross thresholds.
 
 Made a personal website with React.
 
 EDUCATION
-CU Boulder, BA Data Science, expected May 2027.
-Took: machine learning, deep learning, time series, statistical modeling.
+State University, B.S. Computer Science, expected May 2027.
+Took: data structures, machine learning, databases, statistics.
 
 SKILLS
-Python, SQL, R, Pandas, scikit-learn, React, FastAPI, PostgreSQL, Git.`}
+Python, SQL, JavaScript, React, Node.js, Git, PostgreSQL.`}
               value={experience}
               onChange={(e) => onExperienceChange(e.target.value)}
             />

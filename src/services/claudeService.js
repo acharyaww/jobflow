@@ -177,8 +177,8 @@ The final resume MUST fit on a single page. Be ruthless about brevity:
 ==== HANDLING INFORMAL / ROUGH INPUT ====
 The candidate may have written their experience from memory in plain prose, not formatted resume bullets. That is expected and fine.
 - Translate prose into strong resume bullets without inventing facts
-- Example input: "I worked at Walmart from 2020 to now as a service writer. I diagnose car problems, write up repair orders, and trained 3 new techs."
-  → Output bullets: "Diagnosed mechanical issues across 50+ vehicles weekly", "Authored detailed repair orders for technicians and customers", "Trained 3 new technicians on diagnostic procedures and shop protocols"
+- Example input: "I worked at Acme Corp from 2020 to now as an operations associate. I handle inventory, work with vendors, and trained 3 new hires."
+  → Output bullets: "Managed inventory operations across 50+ SKUs weekly", "Coordinated vendor relationships for procurement and fulfillment", "Trained 3 new hires on operational workflows and internal tooling"
 - If dates are missing, omit the dateRange field — never fabricate dates
 - If a numerical detail is missing, write the bullet without a number rather than inventing one
 - If a section (e.g. projects) is empty in the experience bank, return an empty array for it
