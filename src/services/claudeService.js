@@ -206,9 +206,9 @@ For EACH required skill in the JD:
 Return ONLY valid JSON:
 {
   "skill_match_summary": {
-    "matched_required_skills": ["with where it was found, e.g. 'R (in skills.languages)'"],
-    "missing_required_skills": ["only if genuinely absent from ALL fields"],
-    "matched_preferred_skills": [],
+    "matched_required_skills": ["clean skill name only — e.g. 'Python', 'R', 'SQL'. NO parenthetical locations or annotations."],
+    "missing_required_skills": ["clean skill name only — only if genuinely absent from the candidate's experience"],
+    "matched_preferred_skills": ["clean skill name only"],
     "skill_match_percentage": 0
   },
   "work_experience_scores": [
@@ -218,6 +218,11 @@ Return ONLY valid JSON:
     { "name": "", "relevance_score": 0, "why_relevant": "", "matched_keywords": [], "should_include": true }
   ]
 }
+
+CRITICAL: matched_required_skills, missing_required_skills, matched_preferred_skills must contain ONLY the skill name. Examples:
+✅ ["Python", "R", "SQL", "Tableau"]
+❌ ["Python (in skills.languages)", "R (not found anywhere)"]
+The location verification is for YOUR internal reasoning only — never include it in the output.
 
 SCORING:
 - 75-100: strong direct match
@@ -408,9 +413,9 @@ Return ONLY valid JSON:
     },
     "category": "STRONG MATCH|GOOD MATCH|MODERATE MATCH|WEAK MATCH"
   },
-  "strengths": ["specific strength backed by experience bank evidence"],
-  "gaps": ["ONLY skills genuinely absent from experience bank — do not list anything that's in the bank"],
-  "rendering_oversights": ["skills/experience that ARE in the experience bank but did NOT make it into the final resume — these can be fixed by adding them to the resume"],
+  "strengths": ["clean specific strength text — no internal field references like 'skills.languages' or 'work_experience'"],
+  "gaps": ["ONLY skills genuinely absent from experience bank. Use clean skill name + brief reason. NO references to internal JSON structure."],
+  "rendering_oversights": ["skills the candidate has but didn't make it into the final resume — clean text only"],
   "key_changes": ["the most important reframings made"]
 }
 
