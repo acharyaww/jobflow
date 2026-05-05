@@ -174,19 +174,40 @@ Return ONLY valid JSON (no markdown):
 // ─── STEP 3: Match & Score Each Item ─────────────────────────────────────
 async function step3_match(jobAnalysis, resumeAnalysis) {
   const text = await callClaude(
-    `Score how well each piece of the candidate's experience matches this job. INCLUDE generously — only exclude things that are truly unrelated with no transferable angle.
+    `Score how well each piece of the candidate's experience matches this job. INCLUDE generously.
 
 JOB REQUIREMENTS:
 ${JSON.stringify(jobAnalysis)}
 
-CANDIDATE EXPERIENCE:
+CANDIDATE EXPERIENCE BANK (full record — check ALL fields when matching skills):
 ${JSON.stringify(resumeAnalysis)}
+
+==== SKILL MATCHING RULES (CRITICAL — DO NOT MISS) ====
+For EACH required skill in the JD:
+1. Search ALL of these fields in the experience bank:
+   - resumeAnalysis.skills.languages
+   - resumeAnalysis.skills.frameworks_libraries
+   - resumeAnalysis.skills.tools_platforms
+   - resumeAnalysis.skills.domain_methods
+   - resumeAnalysis.skills.soft_skills
+   - Every bullet in resumeAnalysis.work_experience[*].raw_bullets
+   - Every bullet in resumeAnalysis.projects[*].raw_bullets
+   - resumeAnalysis.education[*].coursework
+2. If the skill (or a clear synonym/abbreviation) appears ANYWHERE in those fields → it's a MATCH. Add to matched_required_skills.
+3. Examples of synonyms that MUST count as matches:
+   - "R" matches "R language", "R programming", "RStudio"
+   - "SQL" matches "MySQL", "PostgreSQL", "BigQuery", "T-SQL", "PL/SQL", any "*SQL"
+   - "Python" matches "pandas", "NumPy", "scikit-learn" (those imply Python)
+   - "Machine Learning" matches "ML", "predictive modeling", specific algorithms (Random Forest, XGBoost, Logistic Regression)
+   - "Data Visualization" matches "Tableau", "matplotlib", "seaborn", "Power BI"
+4. ONLY add to missing_required_skills if you genuinely cannot find the skill (or any synonym) anywhere in the experience bank
+5. Be EXHAUSTIVE — false negatives are worse than false positives
 
 Return ONLY valid JSON:
 {
   "skill_match_summary": {
-    "matched_required_skills": [],
-    "missing_required_skills": [],
+    "matched_required_skills": ["with where it was found, e.g. 'R (in skills.languages)'"],
+    "missing_required_skills": ["only if genuinely absent from ALL fields"],
     "matched_preferred_skills": [],
     "skill_match_percentage": 0
   },
@@ -199,19 +220,17 @@ Return ONLY valid JSON:
 }
 
 SCORING:
-- 75-100: strong direct match (job-required skill demonstrated)
-- 50-74: good match (related skill or transferable strength clearly applies)
-- 30-49: transferable only (soft skills, work ethic, communication apply)
-- 10-29: weak (only tangentially related)
+- 75-100: strong direct match
+- 50-74: good match (transferable strength clearly applies)
+- 30-49: transferable only
+- 10-29: weak
 - <10: truly unrelated
 
-INCLUSION (be GENEROUS — recruiters expect to see a full candidate picture):
-- should_include: true if relevance_score >= 25 OR if it's one of the candidate's only ~3-4 entries
-- should_include: false ONLY if score < 25 AND there are >= 4 better entries available
-- DO NOT drop work experience just because the role is in a different field — almost any job teaches transferable skills (communication, deadlines, process, attention to detail, teamwork)
-- DO NOT drop a project just because the tech stack differs — the methodology often transfers (data analysis, problem-solving, building from scratch)
-- A short candidate experience bank should keep ALL entries; only trim when there's abundant content`,
-    2500
+INCLUSION:
+- should_include: true if relevance_score >= 25 OR if candidate has <=4 entries total of that type
+- DO NOT drop work just because the field differs — transferable skills count
+- DO NOT drop a project because the tech stack differs — methodology often transfers`,
+    3000
   );
   return parseJSON(text, {
     skill_match_summary: { matched_required_skills: [], missing_required_skills: [], matched_preferred_skills: [], skill_match_percentage: 0 },
@@ -230,17 +249,17 @@ ${JSON.stringify({ title: jobAnalysis.job_title, seniority: jobAnalysis.seniorit
 RELEVANCE SCORES:
 ${JSON.stringify(matching)}
 
-INCLUSION (lean toward including more, not less):
-- Include ALL entries marked should_include = true
-- Cap: 5 work experiences max, 4 projects max (allow up to these limits, not strict floors)
-- Order each section by relevance_score descending (most relevant first)
-- If the candidate has 3 or fewer of a section type, include them all regardless of score
+INCLUSION (target a comfortable one-page resume — not over-stuffed):
+- HARD CAP: 3 work experiences max, 3 projects max
+- Drop entries with should_include = false
+- Order each section by relevance_score descending
+- If the candidate has fewer total entries than the cap, include all of them
 
-BULLET COUNTS (target ~600 words total, fill the page):
-- Top entry (highest score): 4-5 bullets
-- 2nd-3rd entries: 3-4 bullets
-- 4th-5th entries: 2-3 bullets
-- For projects: top 2 get 3-4 bullets, others 2-3
+BULLET COUNTS (target ~500 words total — comfortable one-page fill):
+- Top entry (highest score): 3-4 bullets
+- 2nd entry: 3 bullets
+- 3rd entry: 2-3 bullets
+- For projects: top project 3 bullets, others 2 bullets each
 
 Return ONLY valid JSON:
 {
@@ -343,24 +362,39 @@ Return ONLY valid JSON:
 }
 
 // ─── STEP 7: Calculate Match Score ───────────────────────────────────────
-async function step7_score(jobAnalysis, matching, rewritten, skills) {
+async function step7_score(jobAnalysis, matching, rewritten, skills, resumeAnalysis) {
   const text = await callClaude(
-    `Score the final tailored resume against the job requirements. Be honest.
+    `Score the final tailored resume against the job requirements. Be honest BUT verify gaps against the candidate's actual experience bank — never invent gaps for skills the candidate clearly has.
 
 JOB REQUIREMENTS:
 ${JSON.stringify(jobAnalysis)}
 
-SKILL MATCHING SUMMARY:
+SKILL MATCHING SUMMARY (from Step 3):
 ${JSON.stringify(matching.skill_match_summary)}
 
-FINAL RESUME CONTENT (bullets + skills):
+CANDIDATE'S FULL EXPERIENCE BANK (source of truth — check this before claiming any gap):
+${JSON.stringify(resumeAnalysis)}
+
+FINAL RESUME CONTENT (what made it onto the page):
 ${JSON.stringify({ experience: rewritten.experience_bullets, projects: rewritten.project_bullets, skills })}
 
+==== CRITICAL — GAP VERIFICATION RULES ====
+A "gap" means the CANDIDATE does not have a skill/experience the JD requires. NOT that the skill didn't make it onto the final resume.
+
+Before listing any gap:
+1. Search the FULL experience bank (resumeAnalysis) for the skill or any synonym
+   - Check skills.languages, skills.frameworks_libraries, skills.tools_platforms, skills.domain_methods
+   - Check every bullet in work_experience and projects
+   - Check coursework in education
+2. If found ANYWHERE in the experience bank → this is NOT a gap. Do NOT list it.
+3. If found in experience bank but NOT in final resume → that means Step 6 (skills) or Step 5 (bullets) overlooked it. Add to "rendering_oversights" instead of "gaps".
+4. Only list as a "gap" if genuinely absent from the entire experience bank.
+
 Calculate match using weighted formula:
-- Required skills coverage (40%): % of required skills present in skills section or bullets
-- Experience relevance (30%): average relevance_score from matching, normalized
-- Keyword optimization (20%): % of must_have_keywords appearing somewhere in the resume
-- Quantification (10%): % of bullets containing a number/percentage
+- Required skills coverage (40%): use matched_required_skills count vs required_skills total
+- Experience relevance (30%): avg relevance_score from matching, normalized
+- Keyword optimization (20%): % of must_have_keywords present anywhere in final resume
+- Quantification (10%): % of bullets with numbers
 
 Return ONLY valid JSON:
 {
@@ -374,17 +408,18 @@ Return ONLY valid JSON:
     },
     "category": "STRONG MATCH|GOOD MATCH|MODERATE MATCH|WEAK MATCH"
   },
-  "strengths": ["specific strength 1", "..."],
-  "gaps": ["specific gap, e.g. 'No direct PostgreSQL experience'", "..."],
-  "key_changes": ["the most important reframings made", "..."]
+  "strengths": ["specific strength backed by experience bank evidence"],
+  "gaps": ["ONLY skills genuinely absent from experience bank — do not list anything that's in the bank"],
+  "rendering_oversights": ["skills/experience that ARE in the experience bank but did NOT make it into the final resume — these can be fixed by adding them to the resume"],
+  "key_changes": ["the most important reframings made"]
 }
 
 Categories: 80+ = STRONG, 65-79 = GOOD, 50-64 = MODERATE, <50 = WEAK.`,
-    1800
+    2200
   );
   return parseJSON(text, {
     match_score: { overall_percentage: 0, breakdown: {}, category: 'MODERATE MATCH' },
-    strengths: [], gaps: [], key_changes: [],
+    strengths: [], gaps: [], rendering_oversights: [], key_changes: [],
   });
 }
 
@@ -484,7 +519,7 @@ export async function tailorResume(profile, experience, job, onProgress = () => 
   fire(STEPS[3]); const plan = await step4_plan(jobAnalysis, matching); fire(STEPS[3], 'done');
   fire(STEPS[4]); const rewritten = await step5_rewriteBullets(jobAnalysis, resumeAnalysis, plan); fire(STEPS[4], 'done');
   fire(STEPS[5]); const skills = await step6_skills(resumeAnalysis, jobAnalysis); fire(STEPS[5], 'done');
-  fire(STEPS[6]); const score = await step7_score(jobAnalysis, matching, rewritten, skills); fire(STEPS[6], 'done');
+  fire(STEPS[6]); const score = await step7_score(jobAnalysis, matching, rewritten, skills, resumeAnalysis); fire(STEPS[6], 'done');
   fire(STEPS[7]); const assembled = await step8_assemble(profile, jobAnalysis, plan, rewritten, skills, resumeAnalysis); fire(STEPS[7], 'done');
 
   // Compose final output in the shape the renderer expects
@@ -496,6 +531,7 @@ export async function tailorResume(profile, experience, job, onProgress = () => 
     match_category: score.match_score?.category ?? '',
     strengths: score.strengths || [],
     gaps: score.gaps || [],
+    rendering_oversights: score.rendering_oversights || [],
     key_changes: score.key_changes || [],
     ats_keywords_hit: matching.skill_match_summary?.matched_required_skills || [],
     ats_keywords_missing: matching.skill_match_summary?.missing_required_skills || [],

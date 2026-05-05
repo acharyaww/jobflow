@@ -97,77 +97,95 @@ function downloadAsTxt(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-// Measure the resume in print mode and apply CSS zoom so it fits on one page
-function applyFitToPageZoom() {
+// Standalone print stylesheet — used inside the isolated print window so there's
+// no modal/overlay interference. Has its own copies of the print sizes to keep
+// this self-contained.
+const PRINT_STYLESHEET = `
+  @page { margin: 0; size: 8.5in 11in; }
+  html, body { margin: 0; padding: 0; background: white; }
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.35;
+    color: #000;
+    padding: 0.5in 0.55in;
+    box-sizing: border-box;
+  }
+  .resume-name { text-align: center; font-size: 18pt; font-weight: 700; margin: 0 0 4pt 0; line-height: 1.15; letter-spacing: 0.5pt; }
+  .resume-contact { text-align: center; font-size: 10pt; margin: 0 0 6pt 0; line-height: 1.3; }
+  .resume-langs { text-align: center; font-size: 9.5pt; margin: 0 0 4pt 0; color: #444; }
+  .resume-section { margin-top: 8pt; }
+  .resume-section-title { font-size: 10.5pt; font-weight: 700; padding-bottom: 1pt; margin-bottom: 4pt; border-bottom: 1pt solid #000; letter-spacing: 1pt; }
+  .resume-item-title { font-size: 11pt; font-weight: 700; }
+  .resume-summary { font-size: 10.5pt; line-height: 1.4; margin: 0 0 3pt 0; }
+  .resume-coursework { font-size: 10pt; }
+  .resume-skill-row { font-size: 10.5pt; margin-bottom: 2pt; }
+  .resume-tech-stack { font-size: 10pt; font-style: italic; color: #222; margin-top: 2pt; }
+  .resume-bullets { list-style: none; margin: 2pt 0 4pt 0; padding: 0; }
+  .resume-bullet { font-size: 10.5pt; line-height: 1.35; margin-bottom: 2pt; padding-left: 1em; text-indent: -1em; }
+  .resume-entry { margin-bottom: 6pt; page-break-inside: avoid; }
+  .resume-row-right { font-size: 10pt; font-style: italic; }
+  /* Two-column row used for entry headers (title left, date right) */
+  .resume-row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .resume-row-left { flex: 1 1 65%; min-width: 0; word-break: normal; overflow-wrap: break-word; }
+`;
+
+// Print by opening a new window — fully isolated from the modal.
+// Renders the resume, MEASURES actual content height in the new window, then scales
+// down with CSS zoom if the content would overflow one page. This is the only reliable
+// way to guarantee a one-page PDF.
+function printResumeInNewWindow() {
   const root = document.getElementById('resume-printable');
   if (!root) return;
-
-  // Reset any previous zoom
-  root.style.zoom = '';
-
-  // Force print styles momentarily so we can measure the actual print height.
-  const tempStyle = document.createElement('style');
-  tempStyle.id = '__measure_print__';
-  tempStyle.textContent = `
-    #resume-printable.__measure__ {
-      position: absolute !important;
-      left: -10000px !important;
-      top: 0 !important;
-      width: 8.5in !important;
-      padding: 0.5in 0.55in !important;
-      line-height: 1.35 !important;
-      font-size: 11pt !important;
-      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
-      box-sizing: border-box !important;
-      visibility: visible !important;
-    }
-    #resume-printable.__measure__ .resume-name { font-size: 18pt !important; line-height: 1.15 !important; margin-bottom: 4pt !important; }
-    #resume-printable.__measure__ .resume-contact { font-size: 10pt !important; line-height: 1.3 !important; margin-bottom: 6pt !important; }
-    #resume-printable.__measure__ .resume-section { margin-top: 8pt !important; }
-    #resume-printable.__measure__ .resume-section-title { font-size: 10.5pt !important; margin-bottom: 4pt !important; padding-bottom: 1pt !important; }
-    #resume-printable.__measure__ .resume-item-title { font-size: 11pt !important; }
-    #resume-printable.__measure__ .resume-summary { font-size: 10.5pt !important; line-height: 1.4 !important; margin-bottom: 3pt !important; }
-    #resume-printable.__measure__ .resume-skill-row { font-size: 10.5pt !important; margin-bottom: 2pt !important; }
-    #resume-printable.__measure__ .resume-bullet { font-size: 10.5pt !important; line-height: 1.35 !important; margin-bottom: 2pt !important; padding-left: 1em !important; text-indent: -1em !important; }
-    #resume-printable.__measure__ .resume-bullets { margin: 2pt 0 4pt 0 !important; padding: 0 !important; }
-    #resume-printable.__measure__ .resume-entry { margin-bottom: 6pt !important; }
-    #resume-printable.__measure__ .resume-coursework { font-size: 10pt !important; }
-    #resume-printable.__measure__ .resume-tech-stack { font-size: 10pt !important; }
-    #resume-printable.__measure__ .resume-row-right { font-size: 10pt !important; }
-  `;
-  document.head.appendChild(tempStyle);
-  root.classList.add('__measure__');
-
-  // Measure in this temporary state
-  const contentHeight = root.scrollHeight;
-  const usableHeightPx = (11 - 1.0) * 96; // 11in page - top/bottom padding (0.5in × 2)
-
-  // Cleanup
-  root.classList.remove('__measure__');
-  document.head.removeChild(tempStyle);
-
-  if (contentHeight > usableHeightPx) {
-    // Scale down with a small safety margin
-    const zoom = Math.max(0.7, (usableHeightPx / contentHeight) * 0.97);
-    root.style.zoom = String(zoom);
+  const printWindow = window.open('', '_blank', 'width=900,height=1100');
+  if (!printWindow) {
+    alert('Please allow popups in your browser to download the PDF.');
+    return;
   }
+
+  // Step 1: write content into the new window with normal styles (no zoom yet)
+  printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Resume</title>
+  <style>
+    ${PRINT_STYLESHEET}
+    /* Wrapper class lets us target the resume body for measurement and scaling */
+    body.__resume__ { transform-origin: top left; }
+  </style>
+</head>
+<body class="__resume__">${root.innerHTML}</body>
+</html>`);
+  printWindow.document.close();
+
+  // Step 2: wait for layout, then measure the ACTUAL rendered height
+  setTimeout(() => {
+    const body = printWindow.document.body;
+    const contentHeight = body.scrollHeight;
+    const pageHeightPx = 11 * 96; // 11in × 96dpi = 1056px
+    // Body has 0.5in top + bottom padding baked into the stylesheet (1in total = 96px),
+    // but scrollHeight includes that padding so compare against full page height.
+
+    // Step 3: if content overflows one page, scale via CSS zoom (most reliable for print)
+    if (contentHeight > pageHeightPx) {
+      const scale = Math.max(0.65, (pageHeightPx / contentHeight) * 0.97);
+      body.style.zoom = String(scale);
+    }
+
+    // Step 4: trigger print dialog (user picks "Save as PDF")
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      setTimeout(() => printWindow.close(), 800);
+    }, 200);
+  }, 400);
 }
 
 function downloadDocument(viewing) {
   if (viewing.type === 'resume') {
     const choice = window.confirm('Click OK to save as PDF (uses browser print dialog).\nClick Cancel to download as plain text (.txt).');
     if (choice) {
-      // Auto-scale to fit one page
-      applyFitToPageZoom();
-      // Defer print until after layout settles
-      setTimeout(() => {
-        window.print();
-        // Reset zoom after the print dialog closes
-        setTimeout(() => {
-          const root = document.getElementById('resume-printable');
-          if (root) root.style.zoom = '';
-        }, 1500);
-      }, 50);
+      printResumeInNewWindow();
     } else {
       const safeLabel = (viewing.label || 'resume').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       downloadAsTxt(`resume_${safeLabel}.txt`, resumeToText(viewing.content));
