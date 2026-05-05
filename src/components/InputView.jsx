@@ -106,7 +106,6 @@ function applyFitToPageZoom() {
   root.style.zoom = '';
 
   // Force print styles momentarily so we can measure the actual print height.
-  // Apply a "force-print-styles" class via a temporary stylesheet.
   const tempStyle = document.createElement('style');
   tempStyle.id = '__measure_print__';
   tempStyle.textContent = `
@@ -115,32 +114,33 @@ function applyFitToPageZoom() {
       left: -10000px !important;
       top: 0 !important;
       width: 8.5in !important;
-      padding: 0.3in 0.3in !important;
-      line-height: 1.22 !important;
-      font-size: 9.5pt !important;
+      padding: 0.5in 0.55in !important;
+      line-height: 1.35 !important;
+      font-size: 11pt !important;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
       box-sizing: border-box !important;
       visibility: visible !important;
     }
-    #resume-printable.__measure__ .resume-name { font-size: 16pt !important; line-height: 1.1 !important; margin-bottom: 2pt !important; }
-    #resume-printable.__measure__ .resume-contact { font-size: 8.5pt !important; line-height: 1.25 !important; margin-bottom: 4pt !important; }
-    #resume-printable.__measure__ .resume-section { margin-top: 4pt !important; }
-    #resume-printable.__measure__ .resume-section-title { font-size: 8.5pt !important; margin-bottom: 2pt !important; padding-bottom: 0.5pt !important; }
-    #resume-printable.__measure__ .resume-item-title { font-size: 9.5pt !important; }
-    #resume-printable.__measure__ .resume-summary { font-size: 9pt !important; line-height: 1.3 !important; margin-bottom: 2pt !important; }
-    #resume-printable.__measure__ .resume-skill-row { font-size: 9pt !important; margin-bottom: 1pt !important; }
-    #resume-printable.__measure__ .resume-bullet { font-size: 9pt !important; line-height: 1.28 !important; margin-bottom: 1pt !important; padding-left: 1em !important; text-indent: -1em !important; }
-    #resume-printable.__measure__ .resume-bullets { margin: 1pt 0 2pt 0 !important; padding: 0 !important; }
-    #resume-printable.__measure__ .resume-entry { margin-bottom: 3pt !important; }
-    #resume-printable.__measure__ .resume-coursework { font-size: 8.5pt !important; }
-    #resume-printable.__measure__ .resume-tech-stack { font-size: 8.5pt !important; }
-    #resume-printable.__measure__ .resume-row-right { font-size: 8.5pt !important; }
+    #resume-printable.__measure__ .resume-name { font-size: 18pt !important; line-height: 1.15 !important; margin-bottom: 4pt !important; }
+    #resume-printable.__measure__ .resume-contact { font-size: 10pt !important; line-height: 1.3 !important; margin-bottom: 6pt !important; }
+    #resume-printable.__measure__ .resume-section { margin-top: 8pt !important; }
+    #resume-printable.__measure__ .resume-section-title { font-size: 10.5pt !important; margin-bottom: 4pt !important; padding-bottom: 1pt !important; }
+    #resume-printable.__measure__ .resume-item-title { font-size: 11pt !important; }
+    #resume-printable.__measure__ .resume-summary { font-size: 10.5pt !important; line-height: 1.4 !important; margin-bottom: 3pt !important; }
+    #resume-printable.__measure__ .resume-skill-row { font-size: 10.5pt !important; margin-bottom: 2pt !important; }
+    #resume-printable.__measure__ .resume-bullet { font-size: 10.5pt !important; line-height: 1.35 !important; margin-bottom: 2pt !important; padding-left: 1em !important; text-indent: -1em !important; }
+    #resume-printable.__measure__ .resume-bullets { margin: 2pt 0 4pt 0 !important; padding: 0 !important; }
+    #resume-printable.__measure__ .resume-entry { margin-bottom: 6pt !important; }
+    #resume-printable.__measure__ .resume-coursework { font-size: 10pt !important; }
+    #resume-printable.__measure__ .resume-tech-stack { font-size: 10pt !important; }
+    #resume-printable.__measure__ .resume-row-right { font-size: 10pt !important; }
   `;
   document.head.appendChild(tempStyle);
   root.classList.add('__measure__');
 
   // Measure in this temporary state
   const contentHeight = root.scrollHeight;
-  const usableHeightPx = (11 - 0.6) * 96; // 11in page - top/bottom padding (0.3in × 2)
+  const usableHeightPx = (11 - 1.0) * 96; // 11in page - top/bottom padding (0.5in × 2)
 
   // Cleanup
   root.classList.remove('__measure__');
@@ -1093,28 +1093,30 @@ function ExperienceHints({ onInsert }) {
 }
 
 // ===== Resume Renderer =====
+// Font: Helvetica Neue / Helvetica / Arial — the gold standard for professional, ATS-friendly resumes.
+// Sizes mirror standard professional resume typography (11pt body, 18pt name).
+const RESUME_FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 const R = {
-  page: { fontFamily: '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif', color: '#000', backgroundColor: '#FFF', padding: '1rem 1.2rem', lineHeight: 1.35 },
-  name: { textAlign: 'center', fontSize: '1.45rem', fontWeight: 700, marginBottom: '0.25rem', lineHeight: 1.15 },
-  contactBlock: { textAlign: 'center', fontSize: '0.8rem', marginBottom: '0.4rem', lineHeight: 1.35, color: '#000' },
-  contact: { textAlign: 'center', fontSize: '0.8rem', marginBottom: '0.05rem' },
-  langs: { textAlign: 'center', fontSize: '0.76rem', color: '#444', marginBottom: '0.25rem' },
-  section: { marginTop: '0.45rem' },
-  sectionTitle: { fontSize: '0.76rem', fontWeight: 700, letterSpacing: '0.06em', borderBottom: '1px solid #000', paddingBottom: '0.05rem', marginBottom: '0.3rem' },
+  page: { fontFamily: RESUME_FONT, color: '#000', backgroundColor: '#FFF', padding: '1.1rem 1.3rem', lineHeight: 1.4 },
+  name: { textAlign: 'center', fontFamily: RESUME_FONT, fontSize: '1.55rem', fontWeight: 700, marginBottom: '0.3rem', lineHeight: 1.15, letterSpacing: '0.01em' },
+  contactBlock: { textAlign: 'center', fontFamily: RESUME_FONT, fontSize: '0.85rem', marginBottom: '0.5rem', lineHeight: 1.4, color: '#000' },
+  contact: { textAlign: 'center', fontFamily: RESUME_FONT, fontSize: '0.85rem', marginBottom: '0.05rem' },
+  langs: { textAlign: 'center', fontFamily: RESUME_FONT, fontSize: '0.8rem', color: '#444', marginBottom: '0.3rem' },
+  section: { marginTop: '0.6rem' },
+  sectionTitle: { fontFamily: RESUME_FONT, fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.08em', borderBottom: '1px solid #000', paddingBottom: '0.08rem', marginBottom: '0.35rem' },
   row: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' },
   rowLeft: { flex: '1 1 65%', minWidth: 0, wordBreak: 'normal', overflowWrap: 'break-word' },
-  rowRight: { fontSize: '0.8rem', fontStyle: 'italic', whiteSpace: 'nowrap', color: '#000', flex: '0 0 auto' },
-  itemTitle: { fontWeight: 700, fontSize: '0.9rem' },
-  itemSubtitle: { fontSize: '0.83rem' },
-  techStack: { fontSize: '0.8rem', fontStyle: 'italic', color: '#222', marginTop: '0.02rem' },
-  coursework: { fontSize: '0.8rem', marginTop: '0.05rem' },
-  skillRow: { fontSize: '0.83rem', marginBottom: '0.12rem' },
+  rowRight: { fontFamily: RESUME_FONT, fontSize: '0.85rem', fontStyle: 'italic', whiteSpace: 'nowrap', color: '#000', flex: '0 0 auto' },
+  itemTitle: { fontFamily: RESUME_FONT, fontWeight: 700, fontSize: '0.95rem' },
+  itemSubtitle: { fontFamily: RESUME_FONT, fontSize: '0.9rem' },
+  techStack: { fontFamily: RESUME_FONT, fontSize: '0.85rem', fontStyle: 'italic', color: '#222', marginTop: '0.05rem' },
+  coursework: { fontFamily: RESUME_FONT, fontSize: '0.85rem', marginTop: '0.08rem' },
+  skillRow: { fontFamily: RESUME_FONT, fontSize: '0.9rem', marginBottom: '0.18rem' },
   skillCat: { fontWeight: 700 },
-  bullets: { listStyle: 'none', margin: '0.2rem 0 0.35rem 0', padding: 0 },
-  // Hanging indent: the em-dash hangs out, the rest of the text aligns
-  bullet: { fontSize: '0.83rem', marginBottom: '0.15rem', lineHeight: 1.4, paddingLeft: '1em', textIndent: '-1em' },
-  summary: { fontSize: '0.85rem', marginBottom: '0.25rem', lineHeight: 1.45 },
-  entry: { marginBottom: '0.45rem' },
+  bullets: { listStyle: 'none', margin: '0.3rem 0 0.45rem 0', padding: 0 },
+  bullet: { fontFamily: RESUME_FONT, fontSize: '0.9rem', marginBottom: '0.22rem', lineHeight: 1.45, paddingLeft: '1em', textIndent: '-1em' },
+  summary: { fontFamily: RESUME_FONT, fontSize: '0.92rem', marginBottom: '0.3rem', lineHeight: 1.5 },
+  entry: { marginBottom: '0.55rem' },
 };
 
 function ResumeRenderer({ resume, profile }) {

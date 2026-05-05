@@ -174,7 +174,7 @@ Return ONLY valid JSON (no markdown):
 // ─── STEP 3: Match & Score Each Item ─────────────────────────────────────
 async function step3_match(jobAnalysis, resumeAnalysis) {
   const text = await callClaude(
-    `Score how well each piece of the candidate's experience matches this job. Be honest — low scores for irrelevant items.
+    `Score how well each piece of the candidate's experience matches this job. INCLUDE generously — only exclude things that are truly unrelated with no transferable angle.
 
 JOB REQUIREMENTS:
 ${JSON.stringify(jobAnalysis)}
@@ -198,10 +198,19 @@ Return ONLY valid JSON:
   ]
 }
 
-Rules:
-- relevance_score: 0-100. Below 25 = irrelevant, 25-50 = transferable only, 50-75 = good match, 75+ = strong direct match
-- should_include: false ONLY if score < 30 AND there's no transferable angle
-- Be honest about gaps — don't pretend the candidate has skills they don't`,
+SCORING:
+- 75-100: strong direct match (job-required skill demonstrated)
+- 50-74: good match (related skill or transferable strength clearly applies)
+- 30-49: transferable only (soft skills, work ethic, communication apply)
+- 10-29: weak (only tangentially related)
+- <10: truly unrelated
+
+INCLUSION (be GENEROUS — recruiters expect to see a full candidate picture):
+- should_include: true if relevance_score >= 25 OR if it's one of the candidate's only ~3-4 entries
+- should_include: false ONLY if score < 25 AND there are >= 4 better entries available
+- DO NOT drop work experience just because the role is in a different field — almost any job teaches transferable skills (communication, deadlines, process, attention to detail, teamwork)
+- DO NOT drop a project just because the tech stack differs — the methodology often transfers (data analysis, problem-solving, building from scratch)
+- A short candidate experience bank should keep ALL entries; only trim when there's abundant content`,
     2500
   );
   return parseJSON(text, {
@@ -213,7 +222,7 @@ Rules:
 // ─── STEP 4: Restructuring Plan ──────────────────────────────────────────
 async function step4_plan(jobAnalysis, matching) {
   const text = await callClaude(
-    `Create a one-page resume layout plan based on relevance scores.
+    `Plan a one-page resume that FILLS the available space. A one-page resume can comfortably hold ~600-700 words. Don't under-fill — recruiters want to see substance.
 
 JOB:
 ${JSON.stringify({ title: jobAnalysis.job_title, seniority: jobAnalysis.seniority, must_have: jobAnalysis.must_have_keywords })}
@@ -221,24 +230,30 @@ ${JSON.stringify({ title: jobAnalysis.job_title, seniority: jobAnalysis.seniorit
 RELEVANCE SCORES:
 ${JSON.stringify(matching)}
 
-Constraints:
-- HARD CAP: 3 work experiences max, 3 projects max
-- Most relevant entry: 3 bullets, others: 2 bullets
-- Drop any entry where should_include = false
+INCLUSION (lean toward including more, not less):
+- Include ALL entries marked should_include = true
+- Cap: 5 work experiences max, 4 projects max (allow up to these limits, not strict floors)
 - Order each section by relevance_score descending (most relevant first)
+- If the candidate has 3 or fewer of a section type, include them all regardless of score
+
+BULLET COUNTS (target ~600 words total, fill the page):
+- Top entry (highest score): 4-5 bullets
+- 2nd-3rd entries: 3-4 bullets
+- 4th-5th entries: 2-3 bullets
+- For projects: top 2 get 3-4 bullets, others 2-3
 
 Return ONLY valid JSON:
 {
   "section_order": ["SUMMARY", "EDUCATION", "TECHNICAL SKILLS", "EXPERIENCE", "PROJECTS"],
   "work_experience_plan": [
-    { "company": "", "include": true, "priority_rank": 1, "max_bullets": 3, "emphasize": ["which keywords/themes to highlight"] }
+    { "company": "", "include": true, "priority_rank": 1, "max_bullets": 4, "emphasize": ["keywords/themes to highlight"] }
   ],
   "projects_plan": [
     { "name": "", "include": true, "priority_rank": 1, "max_bullets": 3, "emphasize": [""] }
   ],
-  "summary_strategy": "1-2 sentence description of how the summary should frame the candidate for this role"
+  "summary_strategy": "2-3 sentence description of how the summary should frame the candidate for this role — pack relevant keywords"
 }`,
-    1800
+    2000
   );
   return parseJSON(text, {
     section_order: ['SUMMARY', 'EDUCATION', 'TECHNICAL SKILLS', 'EXPERIENCE', 'PROJECTS'],
@@ -263,14 +278,15 @@ ${JSON.stringify(resumeAnalysis)}
 PLAN (which entries to include + how many bullets each):
 ${JSON.stringify({ work: plan.work_experience_plan, projects: plan.projects_plan })}
 
-For each entry the plan keeps, write the EXACT number of bullets specified, ordered with the strongest match first.
+For each entry the plan keeps, write the EXACT number of bullets specified by max_bullets, ordered with the strongest match first.
 
 Rules:
 - Use the JD's exact terminology (PostgreSQL not Postgres if JD says PostgreSQL)
 - Format: [Action verb in JD style] + [WHAT using JD-keyword tech] + [HOW measured]
-- Each bullet ≤ 22 words
+- Each bullet 15-28 words — substantive, not minimal. Aim for the longer end if the experience supports it.
 - Quantify when the experience bank has numbers; never invent metrics
 - Mirror what's in "emphasize" for each entry
+- Pack JD keywords organically — each bullet should hit at least 1-2 keywords from the JD when honest
 
 Return ONLY valid JSON:
 {
