@@ -10,7 +10,7 @@ async function callClaude(prompt, maxTokens = 512, temperature = 0) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: maxTokens,
-      temperature, // 0 = deterministic; same input → same output
+      temperature,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -25,22 +25,10 @@ async function callClaude(prompt, maxTokens = 512, temperature = 0) {
 }
 
 function parseJSON(text, fallback) {
-  const match = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+  const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
   if (!match) return fallback;
   try { return JSON.parse(match[0]); } catch { return fallback; }
-}
-
-function buildProfileBlock(profile) {
-  return [
-    profile.name && `Name: ${profile.name}`,
-    profile.email && `Email: ${profile.email}`,
-    profile.phone && `Phone: ${profile.phone}`,
-    profile.address && `Location: ${profile.address}`,
-    profile.linkedin && `LinkedIn: ${profile.linkedin}`,
-    profile.github && `GitHub: ${profile.github}`,
-    profile.website && `Website: ${profile.website}`,
-    profile.languages && `Languages: ${profile.languages}`,
-  ].filter(Boolean).join('\n');
 }
 
 function buildJobBlock(job) {
@@ -53,8 +41,18 @@ function buildJobBlock(job) {
   ].filter(Boolean).join('\n');
 }
 
+function buildProfileHeader(profile) {
+  const contact = [profile.address, profile.email, profile.phone].filter(Boolean);
+  const links = [profile.linkedin, profile.github, profile.website].filter(Boolean);
+  return {
+    name: profile.name || '',
+    contact,
+    links,
+    languages: profile.languages || '',
+  };
+}
+
 // Fetch a job posting URL via our serverless proxy and return the cleaned text.
-// Server-side fetch avoids browser CORS and avoids depending on a third-party proxy.
 export async function fetchJobUrl(url) {
   const res = await fetch(`/api/fetch?url=${encodeURIComponent(url)}`);
   if (!res.ok) throw new Error(`Could not fetch URL (${res.status}). Try pasting the job text directly.`);
@@ -100,162 +98,411 @@ Return ONLY valid JSON:
   return { ...job, url: sourceUrl, source: sourceUrl ? new URL(sourceUrl).hostname : 'pasted' };
 }
 
-// Tailor resume against a parsed job listing — returns structured JSON for proper rendering
-export async function tailorResume(profile, experience, job) {
-  const contactParts = [profile.address, profile.email, profile.phone].filter(Boolean);
-  const linkParts = [profile.linkedin, profile.github, profile.website].filter(Boolean);
+// ═══════════════════════════════════════════════════════════════════════════
+// MULTI-STEP RESUME TAILORING
+// 8 sequential Claude calls, each focused on one stage.
+// onProgress callback fires before each step so the UI can show what's happening.
+// ═══════════════════════════════════════════════════════════════════════════
 
+// ─── STEP 1: Job Analysis ────────────────────────────────────────────────
+async function step1_analyzeJob(job) {
   const text = await callClaude(
-    `Build an ATS-OPTIMIZED resume tailored for this specific job. The goal: when an HR screener or AI tool scans this resume against the job description, it should rank in the top tier of matches. Use ONLY the candidate's actual experience — do not invent skills they don't have.
+    `Analyze this job posting and extract requirements as structured JSON.
 
-==== HEADER (FIXED — copy these EXACT values into the JSON header field) ====
-name: "${profile.name || ''}"
-contact: ${JSON.stringify(contactParts)}
-links: ${JSON.stringify(linkParts)}
-languages: "${profile.languages || ''}"
-
-==== STEP 1 — INTERNAL ANALYSIS (do this silently before writing) ====
-Before writing the resume, internally identify from the JOB LISTING:
-- HARD requirements: must-have skills, tools, technologies, certifications, years of experience
-- SOFT requirements: preferred / nice-to-have skills
-- KEY TOOLS & TECH (exact names + casing): e.g. "PostgreSQL" not "Postgres", "JavaScript" not "JS", "React.js" if they wrote it that way
-- ACTION VERB STYLE: does the JD use "Built / Designed / Architected" or "Develop / Maintain / Support"? Mirror it.
-- DOMAIN KEYWORDS: industry-specific terms (e.g. "ETL pipelines", "A/B testing", "stakeholder communication", "agile sprints")
-
-Then cross-reference against the EXPERIENCE BANK to find legitimate matches.
-
-==== STEP 2 — KEYWORD INJECTION RULES (ATS optimization) ====
-- Use the JD's EXACT terminology and casing where the candidate genuinely has the skill (PostgreSQL ≠ Postgres ≠ postgres for ATS)
-- Aim for the top 10-15 JD keywords to each appear AT LEAST ONCE in the resume (in skills, bullets, or summary) — but only if the candidate actually has that skill
-- Front-load the highest-priority keywords: the FIRST bullet of each entry, the summary, and the skills section get the heaviest keyword density
-- Mirror the JD's action verb style — if the JD says "Develop and maintain", use those verbs in your bullets where applicable
-- If the JD lists qualifications as a numbered/bulleted list, ensure each item the candidate has is reflected somewhere visible
-- DO NOT keyword-stuff or claim skills the candidate doesn't actually have — ATS catches incoherent stuffing, and recruiters definitely do
-
-==== STEP 3 — RELEVANCE ORDERING + AGGRESSIVE CUTTING ====
-- Within EXPERIENCE: order entries by RELEVANCE to this specific job, not chronologically. Most relevant role first, even if older.
-- Within PROJECTS: same — most relevant project first.
-- Within each entry, the FIRST bullet must be the strongest direct match to the JD's must-have requirements.
-- If projects are more relevant than work experience (common for students), still keep both sections in standard order so ATS parses correctly.
-
-CUT ENTRIES THAT DO NOT HELP THIS APPLICATION:
-- For each experience/project, ask: "Does this bullet or entry give the recruiter a reason to interview this person FOR THIS SPECIFIC JOB?" If no — cut it.
-- Drop work experience that has zero transferable angle to this job (e.g. an unrelated retail job applying for a research role)
-- Drop projects that don't demonstrate any skill the JD asks for
-- Drop coursework that isn't relevant to the role
-- KEEP unrelated experience ONLY if you can credibly reframe it via transferable skills (communication, leadership, technical rigor under deadline). If you can't reframe it without sounding forced, cut it.
-- Floor: keep at least 1 experience entry and 1 project so the resume isn't empty. Otherwise be ruthless.
-
-REFRAME — DON'T REUSE:
-- The same experience entry should look noticeably different across two different job tailorings
-- Each bullet should be rewritten to mirror the LANGUAGE of THIS specific JD, not just kept verbatim from the experience bank
-- If the same project appears in two tailorings, the bullets, framing, and tech-stack emphasis should be visibly different
-
-==== STEP 4 — STRUCTURE (ATS-PARSER-FRIENDLY) ====
-- Use EXACT standard section names — ATS systems look for these: SUMMARY, EDUCATION, TECHNICAL SKILLS, EXPERIENCE, PROJECTS
-- Skills must be categorized (e.g. "Languages & Querying", "Data Science & ML", "Tools & Platforms", "Cloud & Infrastructure") — categorization helps ATS classify
-- Categories should reflect what the JOB emphasizes (if JD focuses on cloud, have a "Cloud & Infrastructure" category populated)
-- Summary: 2 dense lines mirroring the JD's required qualifications using the candidate's real background — pack 3-4 high-priority keywords here
-- Use plain text only — no symbols, fancy characters, or anything an ATS parser might choke on
-- Use real dates exactly as in the experience bank — never fabricate
-
-==== STEP 5 — BULLETS THAT WIN ====
-- Format: [Action verb from JD style] + [WHAT you did using JD-keyword tech] + [HOW measured / quantified result]
-- Example given JD wants "Python, SQL, ETL pipelines" and candidate has worked on data ingestion:
-  Weak: "Built data tools using Python"
-  Strong: "Designed and shipped Python ETL pipelines processing 13F filings from SEC EDGAR API into PostgreSQL, with automated dedup and validation reducing manual review by 80%"
-- Quantify everything possible (numbers, percentages, scale, time saved, accuracy)
-- Skip filler ("Responsible for X") — start with a verb that matches the JD's voice
-
-==== ONE-PAGE CONSTRAINT (CRITICAL) ====
-The final resume MUST fit on a single page. Be ruthless about brevity:
-- Summary: 2 lines maximum, no fluff (~30 words total)
-- Each bullet: 1 line ideal, never more than 2 lines (~22 words max)
-- Most relevant experience entry: up to 3 bullets
-- All other experience entries: 2 bullets
-- Most relevant project: up to 3 bullets
-- All other projects: 2 bullets
-- HARD CAP: total experience entries = 3 max (drop the least relevant if more)
-- HARD CAP: total projects = 3 max (drop the least relevant if more)
-- Skills: max 3 categorized rows, each row ≤ 10 items
-- Education: school, degree, dateRange. Coursework only if directly tied to the role (≤ 8 courses)
-
-==== CONTENT RULES ====
-- Include all substantive jobs, projects, and education from the experience bank — but trim per the caps above
-- Each bullet should answer: WHAT did you do, HOW (tech/method), and SO-WHAT (impact/scale) — densely
-- Skip filler like "Responsible for X" — start with the verb
-- DO NOT add parenthetical descriptors, focus areas, concentrations, or specializations to degrees, titles, or roles (e.g. NEVER write "B.S. Data Science (Analytics Focus)" — write "B.S. Data Science")
-- Use degree, title, and company names EXACTLY as written in the experience bank — no embellishment
-
-==== HANDLING INFORMAL / ROUGH INPUT ====
-The candidate may have written their experience from memory in plain prose, not formatted resume bullets. That is expected and fine.
-- Translate prose into strong resume bullets without inventing facts
-- Example input: "I worked at Acme Corp from 2020 to now as an operations associate. I handle inventory, work with vendors, and trained 3 new hires."
-  → Output bullets: "Managed inventory operations across 50+ SKUs weekly", "Coordinated vendor relationships for procurement and fulfillment", "Trained 3 new hires on operational workflows and internal tooling"
-- If dates are missing, omit the dateRange field — never fabricate dates
-- If a numerical detail is missing, write the bullet without a number rather than inventing one
-- If a section (e.g. projects) is empty in the experience bank, return an empty array for it
-
-JOB LISTING:
+JOB POSTING:
 ${buildJobBlock(job)}
 
-FULL EXPERIENCE BANK:
-${experience.slice(0, 5500)}
-
-Return ONLY valid JSON in this EXACT shape (no markdown, no extra fields):
+Return ONLY valid JSON (no markdown):
 {
-  "header": {
-    "name": "",
-    "contact": [],
-    "links": [],
-    "languages": ""
-  },
-  "summary": "",
-  "education": [
-    { "school": "", "degree": "", "dateRange": "", "coursework": "" }
-  ],
-  "skills": [
-    { "category": "", "items": "" }
-  ],
-  "experience": [
-    { "title": "", "company": "", "location": "", "dateRange": "", "bullets": [""] }
+  "job_title": "",
+  "company": "",
+  "seniority": "Entry|Mid|Senior",
+  "industry": "",
+  "required_skills": ["technical skill or tool, exact name + casing from the JD"],
+  "preferred_skills": [""],
+  "must_have_keywords": ["highest-priority terms ATS will scan for"],
+  "nice_to_have_keywords": [""],
+  "key_responsibilities": ["the 3-5 most important duties"],
+  "action_verb_style": "the verb tone the JD uses (e.g. Built/Designed vs Develop/Maintain)",
+  "domain_keywords": ["industry/role-specific terms like 'ETL pipelines', 'A/B testing'"]
+}`,
+    1500
+  );
+  return parseJSON(text, {
+    job_title: job.title, company: job.company, seniority: 'Mid', industry: '',
+    required_skills: [], preferred_skills: [], must_have_keywords: [], nice_to_have_keywords: [],
+    key_responsibilities: [], action_verb_style: '', domain_keywords: [],
+  });
+}
+
+// ─── STEP 2: Resume / Experience Analysis ────────────────────────────────
+async function step2_analyzeResume(experience) {
+  const text = await callClaude(
+    `Extract every job, project, and skill from this candidate's experience bank. Output structured JSON. Do NOT invent anything — if a field is missing, omit it.
+
+The input may be informal prose, not formatted resume text. Convert prose into structured data.
+
+EXPERIENCE BANK:
+${experience.slice(0, 6000)}
+
+Return ONLY valid JSON (no markdown):
+{
+  "work_experience": [
+    { "company": "", "title": "", "location": "", "dates": "", "raw_bullets": ["one bullet per accomplishment"] }
   ],
   "projects": [
-    { "name": "", "techStack": "", "bullets": [""] }
+    { "name": "", "tech_stack": "", "raw_bullets": [""] }
   ],
-  "match_score": 0,
-  "key_changes": [""],
-  "strengths": [""],
-  "gaps": [""],
-  "ats_keywords_hit": [""],
-  "ats_keywords_missing": [""]
-}
-
-For ats_keywords_hit: list the top 8-12 important JD keywords that you successfully incorporated into the resume (because the candidate genuinely has those skills).
-For ats_keywords_missing: list the top 3-5 important JD keywords that the candidate does NOT appear to have, so they know what gaps to address.`,
-    5000
+  "skills": {
+    "languages": [],
+    "frameworks_libraries": [],
+    "tools_platforms": [],
+    "domain_methods": [],
+    "soft_skills": []
+  },
+  "education": [
+    { "school": "", "degree": "", "dates": "", "coursework": [] }
+  ]
+}`,
+    3000
   );
-
-  const result = parseJSON(text, {
-    header: { name: profile.name, contact: contactParts, links: linkParts, languages: profile.languages },
-    summary: '', education: [], skills: [], experience: [], projects: [],
-    match_score: 0, key_changes: [], strengths: [], gaps: [],
-    ats_keywords_hit: [], ats_keywords_missing: [],
+  return parseJSON(text, {
+    work_experience: [], projects: [], skills: {}, education: [],
   });
-
-  // Force header to use real profile values regardless of what Claude returned
-  result.header = {
-    name: profile.name || result.header?.name || '',
-    contact: contactParts.length > 0 ? contactParts : (result.header?.contact ?? []),
-    links: linkParts.length > 0 ? linkParts : (result.header?.links ?? []),
-    languages: profile.languages || result.header?.languages || '',
-  };
-
-  return result;
 }
 
-// Generate a personalized cover letter for a parsed job listing
+// ─── STEP 3: Match & Score Each Item ─────────────────────────────────────
+async function step3_match(jobAnalysis, resumeAnalysis) {
+  const text = await callClaude(
+    `Score how well each piece of the candidate's experience matches this job. Be honest — low scores for irrelevant items.
+
+JOB REQUIREMENTS:
+${JSON.stringify(jobAnalysis)}
+
+CANDIDATE EXPERIENCE:
+${JSON.stringify(resumeAnalysis)}
+
+Return ONLY valid JSON:
+{
+  "skill_match_summary": {
+    "matched_required_skills": [],
+    "missing_required_skills": [],
+    "matched_preferred_skills": [],
+    "skill_match_percentage": 0
+  },
+  "work_experience_scores": [
+    { "company": "", "relevance_score": 0, "why_relevant": "", "matched_keywords": [], "should_include": true }
+  ],
+  "project_scores": [
+    { "name": "", "relevance_score": 0, "why_relevant": "", "matched_keywords": [], "should_include": true }
+  ]
+}
+
+Rules:
+- relevance_score: 0-100. Below 25 = irrelevant, 25-50 = transferable only, 50-75 = good match, 75+ = strong direct match
+- should_include: false ONLY if score < 30 AND there's no transferable angle
+- Be honest about gaps — don't pretend the candidate has skills they don't`,
+    2500
+  );
+  return parseJSON(text, {
+    skill_match_summary: { matched_required_skills: [], missing_required_skills: [], matched_preferred_skills: [], skill_match_percentage: 0 },
+    work_experience_scores: [], project_scores: [],
+  });
+}
+
+// ─── STEP 4: Restructuring Plan ──────────────────────────────────────────
+async function step4_plan(jobAnalysis, matching) {
+  const text = await callClaude(
+    `Create a one-page resume layout plan based on relevance scores.
+
+JOB:
+${JSON.stringify({ title: jobAnalysis.job_title, seniority: jobAnalysis.seniority, must_have: jobAnalysis.must_have_keywords })}
+
+RELEVANCE SCORES:
+${JSON.stringify(matching)}
+
+Constraints:
+- HARD CAP: 3 work experiences max, 3 projects max
+- Most relevant entry: 3 bullets, others: 2 bullets
+- Drop any entry where should_include = false
+- Order each section by relevance_score descending (most relevant first)
+
+Return ONLY valid JSON:
+{
+  "section_order": ["SUMMARY", "EDUCATION", "TECHNICAL SKILLS", "EXPERIENCE", "PROJECTS"],
+  "work_experience_plan": [
+    { "company": "", "include": true, "priority_rank": 1, "max_bullets": 3, "emphasize": ["which keywords/themes to highlight"] }
+  ],
+  "projects_plan": [
+    { "name": "", "include": true, "priority_rank": 1, "max_bullets": 3, "emphasize": [""] }
+  ],
+  "summary_strategy": "1-2 sentence description of how the summary should frame the candidate for this role"
+}`,
+    1800
+  );
+  return parseJSON(text, {
+    section_order: ['SUMMARY', 'EDUCATION', 'TECHNICAL SKILLS', 'EXPERIENCE', 'PROJECTS'],
+    work_experience_plan: [], projects_plan: [], summary_strategy: '',
+  });
+}
+
+// ─── STEP 5: Rewrite Bullets ─────────────────────────────────────────────
+async function step5_rewriteBullets(jobAnalysis, resumeAnalysis, plan) {
+  const text = await callClaude(
+    `Rewrite the candidate's bullets to maximize relevance to THIS job. Mirror the JD's exact terminology and action verb style. Stay truthful — never fabricate.
+
+JOB SIGNALS:
+- Required skills: ${JSON.stringify(jobAnalysis.required_skills)}
+- Must-have keywords: ${JSON.stringify(jobAnalysis.must_have_keywords)}
+- Action verb style: ${jobAnalysis.action_verb_style}
+- Domain keywords: ${JSON.stringify(jobAnalysis.domain_keywords)}
+
+CANDIDATE EXPERIENCE BANK:
+${JSON.stringify(resumeAnalysis)}
+
+PLAN (which entries to include + how many bullets each):
+${JSON.stringify({ work: plan.work_experience_plan, projects: plan.projects_plan })}
+
+For each entry the plan keeps, write the EXACT number of bullets specified, ordered with the strongest match first.
+
+Rules:
+- Use the JD's exact terminology (PostgreSQL not Postgres if JD says PostgreSQL)
+- Format: [Action verb in JD style] + [WHAT using JD-keyword tech] + [HOW measured]
+- Each bullet ≤ 22 words
+- Quantify when the experience bank has numbers; never invent metrics
+- Mirror what's in "emphasize" for each entry
+
+Return ONLY valid JSON:
+{
+  "experience_bullets": [
+    {
+      "company": "exact match from plan",
+      "title": "from experience bank",
+      "location": "from experience bank or empty",
+      "dateRange": "from experience bank or empty",
+      "bullets": ["rewritten bullet 1", "..."]
+    }
+  ],
+  "project_bullets": [
+    {
+      "name": "exact match from plan",
+      "techStack": "tech list relevant to this JD",
+      "bullets": [""]
+    }
+  ]
+}`,
+    4000
+  );
+  return parseJSON(text, { experience_bullets: [], project_bullets: [] });
+}
+
+// ─── STEP 6: Optimize Skills Section ─────────────────────────────────────
+async function step6_skills(resumeAnalysis, jobAnalysis) {
+  const text = await callClaude(
+    `Build the TECHNICAL SKILLS section. Use only skills the candidate actually has (from their experience bank). Order by relevance to this job. Use exact casing from the JD.
+
+CANDIDATE'S SKILLS:
+${JSON.stringify(resumeAnalysis.skills)}
+
+JOB REQUIREMENTS:
+- Required: ${JSON.stringify(jobAnalysis.required_skills)}
+- Preferred: ${JSON.stringify(jobAnalysis.preferred_skills)}
+- Domain: ${JSON.stringify(jobAnalysis.domain_keywords)}
+
+Constraints:
+- 3 categorized rows MAX
+- Each row ≤ 10 items
+- Category names should reflect what THIS job emphasizes (e.g. if JD focuses on data, use "Data Science & ML" not "Programming")
+- Each row's items ordered by relevance to this JD (most relevant first)
+
+Return ONLY valid JSON:
+{
+  "skills": [
+    { "category": "category name reflecting job emphasis", "items": "comma-separated, ordered by relevance" }
+  ]
+}`,
+    1200
+  );
+  return parseJSON(text, { skills: [] });
+}
+
+// ─── STEP 7: Calculate Match Score ───────────────────────────────────────
+async function step7_score(jobAnalysis, matching, rewritten, skills) {
+  const text = await callClaude(
+    `Score the final tailored resume against the job requirements. Be honest.
+
+JOB REQUIREMENTS:
+${JSON.stringify(jobAnalysis)}
+
+SKILL MATCHING SUMMARY:
+${JSON.stringify(matching.skill_match_summary)}
+
+FINAL RESUME CONTENT (bullets + skills):
+${JSON.stringify({ experience: rewritten.experience_bullets, projects: rewritten.project_bullets, skills })}
+
+Calculate match using weighted formula:
+- Required skills coverage (40%): % of required skills present in skills section or bullets
+- Experience relevance (30%): average relevance_score from matching, normalized
+- Keyword optimization (20%): % of must_have_keywords appearing somewhere in the resume
+- Quantification (10%): % of bullets containing a number/percentage
+
+Return ONLY valid JSON:
+{
+  "match_score": {
+    "overall_percentage": 0,
+    "breakdown": {
+      "required_skills_coverage": 0,
+      "experience_relevance": 0,
+      "keyword_optimization": 0,
+      "quantification_quality": 0
+    },
+    "category": "STRONG MATCH|GOOD MATCH|MODERATE MATCH|WEAK MATCH"
+  },
+  "strengths": ["specific strength 1", "..."],
+  "gaps": ["specific gap, e.g. 'No direct PostgreSQL experience'", "..."],
+  "key_changes": ["the most important reframings made", "..."]
+}
+
+Categories: 80+ = STRONG, 65-79 = GOOD, 50-64 = MODERATE, <50 = WEAK.`,
+    1800
+  );
+  return parseJSON(text, {
+    match_score: { overall_percentage: 0, breakdown: {}, category: 'MODERATE MATCH' },
+    strengths: [], gaps: [], key_changes: [],
+  });
+}
+
+// ─── STEP 8: Assemble Final Resume ───────────────────────────────────────
+async function step8_assemble(profile, jobAnalysis, plan, rewritten, skills, resumeAnalysis) {
+  // Steps 5/6 already produced the heavy content. Step 8 just composes the summary
+  // and education + assembles the final structured object.
+  const text = await callClaude(
+    `Write a 2-line professional summary tailored to this job. Use ONLY traits the candidate actually demonstrates in their experience.
+
+JOB:
+- Title: ${jobAnalysis.job_title}
+- Industry: ${jobAnalysis.industry}
+- Must-have keywords: ${JSON.stringify(jobAnalysis.must_have_keywords)}
+
+SUMMARY STRATEGY (from plan):
+${plan.summary_strategy}
+
+CANDIDATE EXPERIENCE (snapshot):
+- Education: ${JSON.stringify(resumeAnalysis.education)}
+- Top experience: ${rewritten.experience_bullets[0]?.title} at ${rewritten.experience_bullets[0]?.company}
+- Top project: ${rewritten.project_bullets[0]?.name}
+
+Constraints:
+- Exactly 2 lines, ~30 words total
+- Pack 3-4 of the must-have keywords if the candidate genuinely has them
+- No clichés ("results-driven", "passionate")
+- Lead with the candidate's strongest credential for THIS job
+
+Return ONLY valid JSON:
+{
+  "summary": "two-sentence professional summary"
+}`,
+    400
+  );
+  const summaryResult = parseJSON(text, { summary: '' });
+
+  // Build education section directly from resume analysis (no extra API call needed)
+  const education = (resumeAnalysis.education || []).map((e) => ({
+    school: e.school || '',
+    degree: e.degree || '',
+    dateRange: e.dates || '',
+    // Only include coursework if at least one course matches a JD keyword
+    coursework: filterRelevantCoursework(e.coursework, jobAnalysis),
+  }));
+
+  return {
+    summary: summaryResult.summary,
+    education,
+    skills: skills.skills || [],
+    experience: (rewritten.experience_bullets || []).map((e) => ({
+      title: e.title || '',
+      company: e.company || '',
+      location: e.location || '',
+      dateRange: e.dateRange || '',
+      bullets: e.bullets || [],
+    })),
+    projects: (rewritten.project_bullets || []).map((p) => ({
+      name: p.name || '',
+      techStack: p.techStack || '',
+      bullets: p.bullets || [],
+    })),
+  };
+}
+
+function filterRelevantCoursework(courses, jobAnalysis) {
+  if (!Array.isArray(courses) || courses.length === 0) return '';
+  const jdKeywords = [
+    ...(jobAnalysis.required_skills || []),
+    ...(jobAnalysis.must_have_keywords || []),
+    ...(jobAnalysis.domain_keywords || []),
+  ].map((k) => String(k).toLowerCase());
+  const relevant = courses.filter((c) => {
+    const cl = String(c).toLowerCase();
+    return jdKeywords.some((kw) => cl.includes(kw) || kw.includes(cl));
+  });
+  return (relevant.length > 0 ? relevant : courses).slice(0, 8).join(', ');
+}
+
+// ─── ORCHESTRATOR ────────────────────────────────────────────────────────
+export async function tailorResume(profile, experience, job, onProgress = () => {}) {
+  const STEPS = [
+    { n: 1, label: 'Analyzing job posting' },
+    { n: 2, label: 'Analyzing your experience bank' },
+    { n: 3, label: 'Matching your fit to requirements' },
+    { n: 4, label: 'Creating optimization plan' },
+    { n: 5, label: 'Rewriting bullets in JD voice' },
+    { n: 6, label: 'Optimizing skills section' },
+    { n: 7, label: 'Calculating match score' },
+    { n: 8, label: 'Assembling final resume' },
+  ];
+  const fire = (step, status = 'running') => onProgress({ step: step.n, total: 8, label: step.label, status });
+
+  fire(STEPS[0]); const jobAnalysis = await step1_analyzeJob(job); fire(STEPS[0], 'done');
+  fire(STEPS[1]); const resumeAnalysis = await step2_analyzeResume(experience); fire(STEPS[1], 'done');
+  fire(STEPS[2]); const matching = await step3_match(jobAnalysis, resumeAnalysis); fire(STEPS[2], 'done');
+  fire(STEPS[3]); const plan = await step4_plan(jobAnalysis, matching); fire(STEPS[3], 'done');
+  fire(STEPS[4]); const rewritten = await step5_rewriteBullets(jobAnalysis, resumeAnalysis, plan); fire(STEPS[4], 'done');
+  fire(STEPS[5]); const skills = await step6_skills(resumeAnalysis, jobAnalysis); fire(STEPS[5], 'done');
+  fire(STEPS[6]); const score = await step7_score(jobAnalysis, matching, rewritten, skills); fire(STEPS[6], 'done');
+  fire(STEPS[7]); const assembled = await step8_assemble(profile, jobAnalysis, plan, rewritten, skills, resumeAnalysis); fire(STEPS[7], 'done');
+
+  // Compose final output in the shape the renderer expects
+  return {
+    header: buildProfileHeader(profile),
+    ...assembled,
+    match_score: score.match_score?.overall_percentage ?? 0,
+    match_breakdown: score.match_score?.breakdown ?? {},
+    match_category: score.match_score?.category ?? '',
+    strengths: score.strengths || [],
+    gaps: score.gaps || [],
+    key_changes: score.key_changes || [],
+    ats_keywords_hit: matching.skill_match_summary?.matched_required_skills || [],
+    ats_keywords_missing: matching.skill_match_summary?.missing_required_skills || [],
+    // Bonus diagnostic data exposed for transparency
+    _pipeline: { jobAnalysis, matching, plan },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cover Letter (still single-call — short generation, no pipeline benefit)
+// ═══════════════════════════════════════════════════════════════════════════
 export async function generateCoverLetter(profile, experience, job) {
+  const profileBlock = [
+    profile.name && `Name: ${profile.name}`,
+    profile.email && `Email: ${profile.email}`,
+    profile.phone && `Phone: ${profile.phone}`,
+    profile.address && `Location: ${profile.address}`,
+    profile.linkedin && `LinkedIn: ${profile.linkedin}`,
+    profile.github && `GitHub: ${profile.github}`,
+    profile.website && `Website: ${profile.website}`,
+    profile.languages && `Languages: ${profile.languages}`,
+  ].filter(Boolean).join('\n');
+
   const text = await callClaude(
     `Write a personalized cover letter for this job. Use ONLY the candidate's actual experience — do not invent anything.
 
@@ -269,7 +516,7 @@ Rules:
 - If a skill is missing, focus on transferable strengths
 
 PROFILE:
-${buildProfileBlock(profile)}
+${profileBlock}
 
 JOB LISTING:
 ${buildJobBlock(job)}
@@ -280,7 +527,7 @@ ${experience.slice(0, 5000)}
 Return ONLY valid JSON, no markdown:
 {"cover_letter":"","highlights":[""]}`,
     2500,
-    0.3 // slight variation for natural prose
+    0.3
   );
 
   return parseJSON(text, { cover_letter: '', highlights: [] });

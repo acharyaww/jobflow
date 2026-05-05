@@ -210,6 +210,9 @@ export default function InputView({ profile, onProfileChange, experience, onExpe
   const [tailorError, setTailorError] = useState('');
   const [resumeResult, setResumeResult] = useState(null);
   const [coverResult, setCoverResult] = useState(null);
+  // Tracks step-by-step pipeline progress for the multi-stage tailoring
+  // Shape: { 1: 'done', 2: 'running', ... }
+  const [tailorSteps, setTailorSteps] = useState({});
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedProfiles)); }, [savedProfiles]);
   useEffect(() => { localStorage.setItem(EXP_STORAGE_KEY, JSON.stringify(savedExperiences)); }, [savedExperiences]);
@@ -360,11 +363,15 @@ export default function InputView({ profile, onProfileChange, experience, onExpe
     if (!experience.trim()) { setTailorError('Add your experience first (Experience tab).'); return; }
     setTailoring(true);
     setTailorError('');
+    setTailorSteps({}); // reset
     try {
-      const result = await tailorResume(profile, experience, parsedJob);
+      const result = await tailorResume(profile, experience, parsedJob, ({ step, status }) => {
+        // Use functional update so concurrent step transitions don't drop state
+        setTailorSteps((prev) => ({ ...prev, [step]: status }));
+      });
       setResumeResult(result);
       upsertApplication(parsedJob, {
-        tailoredResume: result, // store full structured object
+        tailoredResume: result,
         matchScore: result.match_score,
       });
     } catch (e) {
@@ -589,7 +596,8 @@ Python, SQL, JavaScript, React, Node.js, Git, PostgreSQL.`}
             tailoring={tailoring} coverWriting={coverWriting}
             tailorError={tailorError}
             resumeResult={resumeResult} coverResult={coverResult}
-            onParse={handleParseJob} onReset={() => { setJobUrl(''); setJobText(''); resetTailor(); }}
+            tailorSteps={tailorSteps}
+            onParse={handleParseJob} onReset={() => { setJobUrl(''); setJobText(''); resetTailor(); setTailorSteps({}); }}
             onTailor={handleTailorResume} onCover={handleWriteCover}
             onView={(type) => setViewing({ type, content: type === 'resume' ? resumeResult : coverResult.cover_letter, label: parsedJob.company })}
           />
@@ -640,7 +648,90 @@ Python, SQL, JavaScript, React, Node.js, Git, PostgreSQL.`}
   );
 }
 
-function TailorPanel({ jobUrl, setJobUrl, jobText, setJobText, parsedJob, parsing, parseError, tailoring, coverWriting, tailorError, resumeResult, coverResult, onParse, onReset, onTailor, onCover, onView }) {
+const PIPELINE_STEPS = [
+  { n: 1, label: 'Analyzing job posting' },
+  { n: 2, label: 'Reading your experience bank' },
+  { n: 3, label: 'Matching your fit to requirements' },
+  { n: 4, label: 'Creating optimization plan' },
+  { n: 5, label: 'Rewriting bullets in JD voice' },
+  { n: 6, label: 'Optimizing skills section' },
+  { n: 7, label: 'Calculating match score' },
+  { n: 8, label: 'Assembling final resume' },
+];
+
+function StepIcon({ status }) {
+  if (status === 'done') {
+    return <CheckCircle size={14} color={C.green} style={{ flexShrink: 0 }} />;
+  }
+  if (status === 'running') {
+    // Simple spinning ring using inline SVG so we don't need extra deps
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" style={{ flexShrink: 0, animation: 'jobflow-spin 0.9s linear infinite' }}>
+        <circle cx="12" cy="12" r="9" stroke={C.accent} strokeWidth="3" fill="none" strokeDasharray="42 16" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  // Pending: empty circle
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="9" stroke={C.border} strokeWidth="2" fill="none" />
+    </svg>
+  );
+}
+
+function PipelineProgress({ steps }) {
+  const completedCount = Object.values(steps).filter((s) => s === 'done').length;
+  const pct = Math.round((completedCount / PIPELINE_STEPS.length) * 100);
+
+  return (
+    <div style={{
+      marginTop: '1rem', padding: '0.85rem 1rem',
+      backgroundColor: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+    }}>
+      {/* Inline keyframe injection for the spinner */}
+      <style>{`@keyframes jobflow-spin { to { transform: rotate(360deg); } }`}</style>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+        <span style={{ fontSize: '0.78rem', color: C.muted, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          Tailoring pipeline
+        </span>
+        <span style={{ fontSize: '0.78rem', color: C.accentDark, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+          {pct}%
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ width: '100%', height: 4, backgroundColor: C.border, borderRadius: 2, overflow: 'hidden', marginBottom: '0.75rem' }}>
+        <div style={{ width: `${pct}%`, height: '100%', backgroundColor: C.accent, transition: 'width 0.25s ease' }} />
+      </div>
+
+      {/* Step list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+        {PIPELINE_STEPS.map((s) => {
+          const status = steps[s.n] || 'pending';
+          return (
+            <div key={s.n} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <StepIcon status={status} />
+              <span style={{
+                fontSize: '0.82rem',
+                color: status === 'pending' ? C.muted : C.text,
+                fontWeight: status === 'running' ? 600 : 400,
+              }}>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', color: C.muted, marginRight: '0.4rem' }}>
+                  {s.n}/8
+                </span>
+                {s.label}
+                {status === 'running' && '…'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TailorPanel({ jobUrl, setJobUrl, jobText, setJobText, parsedJob, parsing, parseError, tailoring, coverWriting, tailorError, resumeResult, coverResult, tailorSteps = {}, onParse, onReset, onTailor, onCover, onView }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       {!parsedJob && (
@@ -758,6 +849,8 @@ function TailorPanel({ jobUrl, setJobUrl, jobText, setJobText, parsedJob, parsin
             {tailorError && (
               <p style={{ color: C.error, fontSize: '0.82rem', marginTop: '0.75rem' }}>{tailorError}</p>
             )}
+
+            {tailoring && <PipelineProgress steps={tailorSteps} />}
           </div>
 
           {resumeResult && (
