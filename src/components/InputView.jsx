@@ -108,7 +108,7 @@ const PRINT_STYLESHEET = `
     font-size: 11pt;
     line-height: 1.35;
     color: #000;
-    padding: 0.5in 0.55in;
+    padding: 0.3in 0.4in 0.5in 0.4in;
     box-sizing: border-box;
   }
   .resume-name { text-align: center; font-size: 18pt; font-weight: 700; margin: 0 0 4pt 0; line-height: 1.15; letter-spacing: 0.5pt; }
@@ -168,7 +168,7 @@ function printResumeInNewWindow() {
 
     // Step 3: if content overflows one page, scale via CSS zoom (most reliable for print)
     if (contentHeight > pageHeightPx) {
-      const scale = Math.max(0.65, (pageHeightPx / contentHeight) * 0.97);
+      const scale = Math.max(0.55, (pageHeightPx / contentHeight) * 0.97);
       body.style.zoom = String(scale);
     }
 

@@ -355,6 +355,12 @@ Constraints:
 - Category names should reflect what THIS job emphasizes (e.g. if JD focuses on data, use "Data Science & ML" not "Programming")
 - Each row's items ordered by relevance to this JD (most relevant first)
 
+CRITICAL — REQUIRED SKILLS COVERAGE:
+- ALWAYS include every job-required skill that appears ANYWHERE in the candidate's experience bank, even if they only have it at beginner or intermediate level (coursework, single project, brief exposure all count).
+- Search exhaustively: skills.languages, skills.frameworks_libraries, skills.tools_platforms, skills.domain_methods, every work_experience bullet, every project, and education coursework.
+- If a required skill is found at any proficiency level, it MUST appear in the output. Do not omit it because the candidate is not advanced — JD-required skills always make the cut over nice-to-haves.
+- Only omit a required skill if it is genuinely absent from the entire experience bank.
+
 Return ONLY valid JSON:
 {
   "skills": [
