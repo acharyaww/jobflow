@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, FileText, Save, Check, Trash2, Briefcase, Mail, ExternalLink, Sparkles, Link2, AlertCircle, CheckCircle, Download } from 'lucide-react';
+import { toJpeg } from 'html-to-image';
 import { fetchJobUrl, extractJobFromText, tailorResume, generateCoverLetter } from '../services/claudeService';
 
 const C = {
@@ -130,65 +131,59 @@ const PRINT_STYLESHEET = `
   .resume-row-left { flex: 1 1 65%; min-width: 0; word-break: normal; overflow-wrap: break-word; }
 `;
 
-// Print by opening a new window — fully isolated from the modal.
-// Renders the resume, MEASURES actual content height in the new window, then scales
-// down with CSS zoom if the content would overflow one page. This is the only reliable
-// way to guarantee a one-page PDF.
-function printResumeInNewWindow() {
+// Render the resume offscreen with print styles applied, then capture as JPEG.
+// Using an image instead of a PDF avoids all the page-break / scaling headaches —
+// one tall image, no spillover.
+async function downloadResumeAsJpeg(label) {
   const root = document.getElementById('resume-printable');
   if (!root) return;
-  const printWindow = window.open('', '_blank', 'width=900,height=1100');
-  if (!printWindow) {
-    alert('Please allow popups in your browser to download the PDF.');
-    return;
+
+  // Offscreen container sized exactly like a US Letter page (8.5in = 816px @ 96dpi).
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed; left:-99999px; top:0; width:8.5in; background:white; z-index:-1;';
+
+  const styleEl = document.createElement('style');
+  styleEl.textContent = PRINT_STYLESHEET;
+  container.appendChild(styleEl);
+
+  // Mimic the print body — same font/padding rules baked in inline so we don't
+  // need a real <body> element to apply them.
+  const bodyDiv = document.createElement('div');
+  bodyDiv.style.cssText = 'font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; font-size:11pt; line-height:1.35; color:#000; padding:0.3in 0.4in 0.5in 0.4in; box-sizing:border-box; background:white; width:100%;';
+  bodyDiv.innerHTML = root.innerHTML;
+  container.appendChild(bodyDiv);
+
+  document.body.appendChild(container);
+
+  try {
+    if (document.fonts?.ready) await document.fonts.ready;
+    await new Promise((r) => setTimeout(r, 150));
+
+    const dataUrl = await toJpeg(bodyDiv, {
+      quality: 0.95,
+      pixelRatio: 2, // 2x DPI for crisp text
+      backgroundColor: '#ffffff',
+      cacheBust: true,
+    });
+
+    const safeLabel = (label || 'resume').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+    const link = document.createElement('a');
+    link.download = `resume_${safeLabel}.jpeg`;
+    link.href = dataUrl;
+    link.click();
+  } catch (err) {
+    console.error('Failed to generate JPEG:', err);
+    alert('Could not generate JPEG. Try the .txt option instead.');
+  } finally {
+    document.body.removeChild(container);
   }
-
-  // Step 1: write content into the new window with normal styles (no zoom yet)
-  printWindow.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Resume</title>
-  <style>
-    ${PRINT_STYLESHEET}
-    /* Wrapper class lets us target the resume body for measurement and scaling */
-    body.__resume__ { transform-origin: top left; }
-  </style>
-</head>
-<body class="__resume__">${root.innerHTML}</body>
-</html>`);
-  printWindow.document.close();
-
-  // Step 2: wait for layout, then measure the ACTUAL rendered height
-  setTimeout(() => {
-    const body = printWindow.document.body;
-    const contentHeight = body.scrollHeight;
-    const pageHeightPx = 11 * 96; // 11in × 96dpi = 1056px
-    // Body has 0.5in top + bottom padding baked into the stylesheet (1in total = 96px),
-    // but scrollHeight includes that padding so compare against full page height.
-
-    // Step 3: scale via CSS zoom if content is anywhere near the page boundary.
-    // Trigger at 96% of page height because the print engine often renders slightly
-    // taller than scrollHeight (sub-pixel rounding, font metrics differences).
-    // Safety factor 0.93 gives real buffer so the last bullet doesn't get bumped.
-    if (contentHeight > pageHeightPx * 0.96) {
-      const scale = Math.max(0.55, (pageHeightPx / contentHeight) * 0.93);
-      body.style.zoom = String(scale);
-    }
-
-    // Step 4: trigger print dialog (user picks "Save as PDF")
-    setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-      setTimeout(() => printWindow.close(), 800);
-    }, 200);
-  }, 400);
 }
 
 function downloadDocument(viewing) {
   if (viewing.type === 'resume') {
-    const choice = window.confirm('Click OK to save as PDF (uses browser print dialog).\nClick Cancel to download as plain text (.txt).');
+    const choice = window.confirm('Click OK to save as JPEG image.\nClick Cancel to download as plain text (.txt).');
     if (choice) {
-      printResumeInNewWindow();
+      downloadResumeAsJpeg(viewing.label);
     } else {
       const safeLabel = (viewing.label || 'resume').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       downloadAsTxt(`resume_${safeLabel}.txt`, resumeToText(viewing.content));
