@@ -166,9 +166,12 @@ function printResumeInNewWindow() {
     // Body has 0.5in top + bottom padding baked into the stylesheet (1in total = 96px),
     // but scrollHeight includes that padding so compare against full page height.
 
-    // Step 3: if content overflows one page, scale via CSS zoom (most reliable for print)
-    if (contentHeight > pageHeightPx) {
-      const scale = Math.max(0.55, (pageHeightPx / contentHeight) * 0.97);
+    // Step 3: scale via CSS zoom if content is anywhere near the page boundary.
+    // Trigger at 96% of page height because the print engine often renders slightly
+    // taller than scrollHeight (sub-pixel rounding, font metrics differences).
+    // Safety factor 0.93 gives real buffer so the last bullet doesn't get bumped.
+    if (contentHeight > pageHeightPx * 0.96) {
+      const scale = Math.max(0.55, (pageHeightPx / contentHeight) * 0.93);
       body.style.zoom = String(scale);
     }
 
